@@ -295,7 +295,8 @@
         
         .interactive-plot {
             width: 100%;
-            height: 400px;
+            height: min(75vh, 700px);
+            min-height: 500px;
             border: 2px solid #ddd;
             border-radius: 8px;
             position: relative;
@@ -437,44 +438,35 @@
                 </div>
             </div>
             
-            <!-- Interactive Three Point Demo -->
+            <!-- Interactive N-Point Correlation Explorer -->
             <div class="interactive-three-point">
-                <h2>Interactive Three-Point Correlation Explorer</h2>
+                <h2>Interactive Correlation Explorer</h2>
                 <div class="interactive-container">
                     <div class="interactive-plot-container">
+                        <div class="slider-container" style="margin-bottom: 10px;">
+                            <label>Number of points on y=x:</label>
+                            <input type="number" id="numPointsInput" min="2" max="15" value="3" style="width: 60px; padding: 5px; font-size: 1em;">
+                            <button class="action-button" onclick="applyNumPoints()" style="flex: 0 0 auto;">Apply</button>
+                        </div>
                         <div class="interactive-plot" id="interactivePlot">
-                            <svg id="plotSvg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet">
-                                <!-- Grid lines -->
+                            <svg id="plotSvg" viewBox="0 0 500 500" preserveAspectRatio="xMidYMid meet">
                                 <defs>
-                                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                                        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ddd" stroke-width="0.5"/>
+                                    <pattern id="gridDotted" width="25" height="25" patternUnits="userSpaceOnUse">
+                                        <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#ccc" stroke-width="0.5" stroke-dasharray="2,4"/>
                                     </pattern>
                                 </defs>
-                                <rect width="100%" height="100%" fill="url(#grid)" />
-                                
-                                <!-- Axes -->
-                                <line x1="40" y1="360" x2="360" y2="360" stroke="#2c3e50" stroke-width="2"/>
-                                <line x1="40" y1="360" x2="40" y2="40" stroke="#2c3e50" stroke-width="2"/>
-                                
-                                <!-- Axis labels -->
-                                <text x="200" y="390" text-anchor="middle" font-size="14" fill="#2c3e50">X</text>
-                                <text x="15" y="200" text-anchor="middle" font-size="14" fill="#2c3e50" transform="rotate(-90 15 200)">Y</text>
-                                
-                                <!-- Diagonal line y=x -->
-                                <line id="diagonalLine" x1="40" y1="360" x2="360" y2="40" class="diagonal-line"/>
-                                
-                                <!-- Points -->
-                                <circle id="point0" class="draggable-point" cx="80" cy="320" r="6" fill="#e74c3c" stroke="#fff" stroke-width="2"/>
-                                <circle id="point1" class="draggable-point" cx="200" cy="200" r="6" fill="#3498db" stroke="#fff" stroke-width="2"/>
-                                <circle id="point2" class="draggable-point" cx="320" cy="80" r="6" fill="#27ae60" stroke="#fff" stroke-width="2"/>
-                                
-                                <!-- Point labels -->
-                                <text id="label0" x="80" y="310" text-anchor="middle" font-size="12" fill="#2c3e50" font-weight="bold">P1</text>
-                                <text id="label1" x="200" y="190" text-anchor="middle" font-size="12" fill="#2c3e50" font-weight="bold">P2</text>
-                                <text id="label2" x="320" y="70" text-anchor="middle" font-size="12" fill="#2c3e50" font-weight="bold">P3</text>
+                                <rect width="100%" height="100%" fill="url(#gridDotted)" />
+                                <g id="axesGroup"></g>
+                                <line id="diagonalLine" class="diagonal-line"/>
+                                <g id="contourGroup"></g>
+                                <g id="pointsGroup"></g>
                             </svg>
                         </div>
-                        <div class="button-group">
+                        <div class="button-group" style="flex-wrap: wrap;">
+                            <label style="display: flex; align-items: center; gap: 8px; padding: 8px;">
+                                <input type="checkbox" id="lockToContourCheckbox">
+                                <span>Lock to contour (slide selected point on contour only)</span>
+                            </label>
                             <button class="action-button" onclick="snapToDiagonal()">Snap to y=x Line</button>
                             <button class="action-button reset" onclick="resetPoints()">Reset</button>
                         </div>
@@ -488,26 +480,15 @@
                             <div id="correlationStrength" class="correlation-strength-display strength-strong">Perfect Positive</div>
                         </div>
                         
-                        <div class="point-info">
-                            <strong>Point 1 (Red):</strong><br>
-                            <span id="point0Coords">(0.00, 0.00)</span>
-                        </div>
-                        <div class="point-info">
-                            <strong>Point 2 (Blue):</strong><br>
-                            <span id="point1Coords">(1.00, 1.00)</span>
-                        </div>
-                        <div class="point-info">
-                            <strong>Point 3 (Green):</strong><br>
-                            <span id="point2Coords">(2.00, 2.00)</span>
-                        </div>
+                        <div id="pointInfoContainer" class="point-info"></div>
                         
                         <div class="instructions">
                             <strong>Instructions:</strong>
                             <ul>
-                                <li>Drag any point to explore correlation</li>
-                                <li>Points move in 0.01 increments</li>
-                                <li>Watch correlation change in real-time</li>
-                                <li>Use "Snap to y=x" to align points</li>
+                                <li>Drag any point to explore correlation. Other points stay fixed.</li>
+                                <li>Contour shows where the selected point can move (others fixed) to keep correlation constant.</li>
+                                <li>Check "Lock to contour" to slide the selected point only along the contour (correlation stays fixed).</li>
+                                <li>Use "Snap to y=x" to align all points to the diagonal.</li>
                             </ul>
                         </div>
                     </div>
@@ -576,70 +557,152 @@
     <script>
         let linearChart, categoricalChart;
         
-        // Interactive three-point correlation demo
-        let points = [
-            { x: 0, y: 0, element: null },
-            { x: 1, y: 1, element: null },
-            { x: 2, y: 2, element: null }
-        ];
-        
+        // Interactive N-point correlation demo
+        const POINT_COLORS = ['#e74c3c', '#3498db', '#27ae60', '#9b59b6', '#f39c12', '#1abc9c', '#e67e22', '#34495e'];
+        let points = [];
         let draggingPoint = null;
+        let selectedPointIndex = null;  // which point's contour to show
         let dragOffset = { x: 0, y: 0 };
         
-        // SVG coordinate system: viewBox is 0-400, but we map 0-3 for data
-        const SVG_WIDTH = 400;
-        const SVG_HEIGHT = 400;
-        const PADDING = 40;
-        const PLOT_WIDTH = SVG_WIDTH - 2 * PADDING;
-        const PLOT_HEIGHT = SVG_HEIGHT - 2 * PADDING;
-        const DATA_MIN = 0;
-        const DATA_MAX = 2.5; // Allow some room beyond (2,2) for dragging
+        // SVG: 500x500, axes centered at origin; data range symmetric
+        const SVG_SIZE = 500;
+        const PADDING = 50;
+        const PLOT_SIZE = SVG_SIZE - 2 * PADDING;
+        const DATA_EXTENT = 5;     // plot spans [-5, 5]
+        const DATA_MIN = -DATA_EXTENT;
+        const DATA_MAX = DATA_EXTENT;
+        const POINT_MIN = -1;     // points constrained to [-1, 1]
+        const POINT_MAX = 1;
+        const ORIGIN_SVG = PADDING + PLOT_SIZE / 2;
         
         function dataToSvgX(x) {
-            return PADDING + ((x - DATA_MIN) / (DATA_MAX - DATA_MIN)) * PLOT_WIDTH;
+            return ORIGIN_SVG + (x / DATA_EXTENT) * (PLOT_SIZE / 2);
         }
         
         function dataToSvgY(y) {
-            return PADDING + PLOT_HEIGHT - ((y - DATA_MIN) / (DATA_MAX - DATA_MIN)) * PLOT_HEIGHT;
+            return ORIGIN_SVG - (y / DATA_EXTENT) * (PLOT_SIZE / 2);
         }
         
         function svgToDataX(svgX) {
-            return DATA_MIN + ((svgX - PADDING) / PLOT_WIDTH) * (DATA_MAX - DATA_MIN);
+            return ((svgX - ORIGIN_SVG) / (PLOT_SIZE / 2)) * DATA_EXTENT;
         }
         
         function svgToDataY(svgY) {
-            return DATA_MIN + ((PLOT_HEIGHT - (svgY - PADDING)) / PLOT_HEIGHT) * (DATA_MAX - DATA_MIN);
+            return -((svgY - ORIGIN_SVG) / (PLOT_SIZE / 2)) * DATA_EXTENT;
         }
         
         function roundToStep(value, step) {
             return Math.round(value / step) * step;
         }
         
+        function drawAxesAndLattice() {
+            const g = document.getElementById('axesGroup');
+            g.innerHTML = '';
+            const x0 = dataToSvgX(0), y0 = dataToSvgY(0);
+            const left = dataToSvgX(DATA_MIN), right = dataToSvgX(DATA_MAX);
+            const bottom = dataToSvgY(DATA_MIN), top = dataToSvgY(DATA_MAX);
+            // Dotted lattice lines at integer steps
+            for (let v = Math.ceil(DATA_MIN); v <= Math.floor(DATA_MAX); v++) {
+                if (v === 0) continue;
+                const sx = dataToSvgX(v);
+                const sy = dataToSvgY(v);
+                const lineV = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                lineV.setAttribute('x1', sx); lineV.setAttribute('y1', top);
+                lineV.setAttribute('x2', sx); lineV.setAttribute('y2', bottom);
+                lineV.setAttribute('stroke', '#bbb'); lineV.setAttribute('stroke-width', '0.5');
+                lineV.setAttribute('stroke-dasharray', '3,4');
+                g.appendChild(lineV);
+                const lineH = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                lineH.setAttribute('x1', left); lineH.setAttribute('y1', sy);
+                lineH.setAttribute('x2', right); lineH.setAttribute('y2', sy);
+                lineH.setAttribute('stroke', '#bbb'); lineH.setAttribute('stroke-width', '0.5');
+                lineH.setAttribute('stroke-dasharray', '3,4');
+                g.appendChild(lineH);
+            }
+            // Axes through origin
+            const axisStroke = '#2c3e50';
+            const xAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            xAxis.setAttribute('x1', left); xAxis.setAttribute('y1', y0);
+            xAxis.setAttribute('x2', right); xAxis.setAttribute('y2', y0);
+            xAxis.setAttribute('stroke', axisStroke); xAxis.setAttribute('stroke-width', '2');
+            g.appendChild(xAxis);
+            const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            yAxis.setAttribute('x1', x0); yAxis.setAttribute('y1', top);
+            yAxis.setAttribute('x2', x0); yAxis.setAttribute('y2', bottom);
+            yAxis.setAttribute('stroke', axisStroke); yAxis.setAttribute('stroke-width', '2');
+            g.appendChild(yAxis);
+            // Axis labels
+            [-5,-2,2,5].forEach(v => {
+                const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                tx.setAttribute('x', dataToSvgX(v)); tx.setAttribute('y', y0 + 18);
+                tx.setAttribute('text-anchor', 'middle'); tx.setAttribute('font-size', '12');
+                tx.setAttribute('fill', '#2c3e50'); tx.textContent = v;
+                g.appendChild(tx);
+                const ty = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                ty.setAttribute('x', x0 - 10); ty.setAttribute('y', dataToSvgY(v));
+                ty.setAttribute('text-anchor', 'end'); ty.setAttribute('dominant-baseline', 'middle');
+                ty.setAttribute('font-size', '12'); ty.setAttribute('fill', '#2c3e50');
+                ty.textContent = v;
+                g.appendChild(ty);
+            });
+            const xLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            xLabel.setAttribute('x', right + 15); xLabel.setAttribute('y', y0);
+            xLabel.setAttribute('text-anchor', 'start'); xLabel.setAttribute('dominant-baseline', 'middle');
+            xLabel.setAttribute('font-size', '14'); xLabel.setAttribute('fill', '#2c3e50');
+            xLabel.textContent = 'X';
+            g.appendChild(xLabel);
+            const yLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            yLabel.setAttribute('x', x0); yLabel.setAttribute('y', top - 12);
+            yLabel.setAttribute('text-anchor', 'middle'); yLabel.setAttribute('font-size', '14');
+            yLabel.setAttribute('fill', '#2c3e50'); yLabel.textContent = 'Y';
+            g.appendChild(yLabel);
+            // Diagonal y=x
+            const diag = document.getElementById('diagonalLine');
+            diag.setAttribute('x1', left); diag.setAttribute('y1', bottom);
+            diag.setAttribute('x2', right); diag.setAttribute('y2', top);
+        }
+        
+        function createPointsOnDiagonal(n) {
+            points = [];
+            const span = POINT_MAX - POINT_MIN;
+            for (let i = 0; i < n; i++) {
+                const t = n === 1 ? 0 : POINT_MIN + (span * i) / (n - 1);
+                points.push({ x: t, y: t, element: null, labelEl: null });
+            }
+        }
+        
         function calculateCorrelation() {
             const x = points.map(p => p.x);
             const y = points.map(p => p.y);
-            
-            const n = points.length;
+            return correlationFromArrays(x, y);
+        }
+        
+        function correlationFromArrays(x, y) {
+            const n = x.length;
             const xMean = x.reduce((sum, val) => sum + val, 0) / n;
             const yMean = y.reduce((sum, val) => sum + val, 0) / n;
-            
-            let numerator = 0;
-            let xVariance = 0;
-            let yVariance = 0;
-            
+            let numerator = 0, xVariance = 0, yVariance = 0;
             for (let i = 0; i < n; i++) {
-                const xDiff = x[i] - xMean;
-                const yDiff = y[i] - yMean;
+                const xDiff = x[i] - xMean, yDiff = y[i] - yMean;
                 numerator += xDiff * yDiff;
                 xVariance += xDiff * xDiff;
                 yVariance += yDiff * yDiff;
             }
-            
             const denominator = Math.sqrt(xVariance * yVariance);
-            const correlation = denominator === 0 ? 0 : numerator / denominator;
-            
-            return isNaN(correlation) ? 0 : correlation;
+            const r = denominator === 0 ? 0 : numerator / denominator;
+            return isNaN(r) ? 0 : r;
         }
+        
+        // Correlation if point at index 'replaceIdx' is at (px, py); all OTHER points stay fixed at current positions
+        function correlationWithPointAt(replaceIdx, px, py) {
+            const x = points.map((p, i) => i === replaceIdx ? px : p.x);
+            const y = points.map((p, i) => i === replaceIdx ? py : p.y);
+            return correlationFromArrays(x, y);
+        }
+        
+        // Cached contour polylines in data coords [[x,y], ...] per path, for snap-to-contour mode
+        let contourPolylines = [];
+        let contourRTarget = 0;  // correlation value this contour was drawn for
         
         function updateCorrelationDisplay() {
             const correlation = calculateCorrelation();
@@ -673,117 +736,266 @@
         }
         
         function updatePointDisplay() {
-            document.getElementById('point0Coords').textContent = `(${points[0].x.toFixed(2)}, ${points[0].y.toFixed(2)})`;
-            document.getElementById('point1Coords').textContent = `(${points[1].x.toFixed(2)}, ${points[1].y.toFixed(2)})`;
-            document.getElementById('point2Coords').textContent = `(${points[2].x.toFixed(2)}, ${points[2].y.toFixed(2)})`;
+            const container = document.getElementById('pointInfoContainer');
+            container.innerHTML = points.map((p, i) => {
+                const sel = selectedPointIndex === i ? ' (selected — contour for this point)' : '';
+                return `<div class="point-info"><strong>Point ${i + 1}${sel}:</strong><br><span>(${p.x.toFixed(2)}, ${p.y.toFixed(2)})</span></div>`;
+            }).join('');
         }
         
         function updatePointPosition(index) {
             const point = points[index];
             const svgX = dataToSvgX(point.x);
             const svgY = dataToSvgY(point.y);
-            
             point.element.setAttribute('cx', svgX);
             point.element.setAttribute('cy', svgY);
-            
-            const label = document.getElementById(`label${index}`);
-            label.setAttribute('x', svgX);
-            label.setAttribute('y', svgY - 15);
+            if (point.labelEl) {
+                point.labelEl.setAttribute('x', svgX);
+                point.labelEl.setAttribute('y', svgY - 12);
+            }
+        }
+        
+        function drawContourLines() {
+            const g = document.getElementById('contourGroup');
+            g.innerHTML = '';
+            contourPolylines = [];
+            if (selectedPointIndex == null || points.length < 2) return;
+            const rTarget = calculateCorrelation();
+            contourRTarget = rTarget;
+            const gridRes = 100;
+            const xMin = DATA_MIN, xMax = DATA_MAX;
+            const dx = (xMax - xMin) / gridRes;
+            const grid = [];
+            for (let j = 0; j <= gridRes; j++) {
+                const row = [];
+                const y = xMin + j * dx;
+                for (let i = 0; i <= gridRes; i++) {
+                    const x = xMin + i * dx;
+                    const r = correlationWithPointAt(selectedPointIndex, x, y);
+                    row.push(r);
+                }
+                grid.push(row);
+            }
+            const segments = [];
+            for (let j = 0; j < gridRes; j++) {
+                for (let i = 0; i < gridRes; i++) {
+                    const v00 = grid[j][i], v10 = grid[j][i+1], v01 = grid[j+1][i], v11 = grid[j+1][i+1];
+                    const x0 = xMin + i * dx, x1 = xMin + (i+1) * dx;
+                    const y0 = xMin + j * dx, y1 = xMin + (j+1) * dx;
+                    const pts = [];
+                    if ((v00 - rTarget) * (v10 - rTarget) < 0 && v10 !== v00)
+                        pts.push([x0 + (rTarget - v00) / (v10 - v00) * dx, y0]);
+                    if ((v10 - rTarget) * (v11 - rTarget) < 0 && v11 !== v10)
+                        pts.push([x1, y0 + (rTarget - v10) / (v11 - v10) * dx]);
+                    if ((v11 - rTarget) * (v01 - rTarget) < 0 && v01 !== v11)
+                        pts.push([x0 + (rTarget - v01) / (v11 - v01) * dx, y1]);
+                    if ((v01 - rTarget) * (v00 - rTarget) < 0 && v00 !== v01)
+                        pts.push([x0, y0 + (rTarget - v00) / (v01 - v00) * dx]);
+                    if (pts.length === 2)
+                        segments.push([[pts[0][0], pts[0][1]], [pts[1][0], pts[1][1]]]);
+                    else if (pts.length === 4)
+                        { segments.push([pts[0], pts[2]]); segments.push([pts[1], pts[3]]); }
+                }
+            }
+            if (segments.length === 0) return;
+            const key = (a) => `${(Math.round(a[0]*1e5)/1e5)},${(Math.round(a[1]*1e5)/1e5)}`;
+            const segs = segments.map(([a, b]) => ({ a, b, ka: key(a), kb: key(b) }));
+            const paths = [];
+            const polylineData = [];
+            const used = new Set();
+            for (let i = 0; i < segs.length; i++) {
+                if (used.has(i)) continue;
+                const polyline = [];
+                let [cur, curKey] = [segs[i].a, segs[i].ka];
+                polyline.push([cur[0], cur[1]]);
+                used.add(i);
+                let [next, nextKey] = [segs[i].b, segs[i].kb];
+                polyline.push([next[0], next[1]]);
+                cur = next; curKey = nextKey;
+                for (;;) {
+                    let found = false;
+                    for (let j = 0; j < segs.length; j++) {
+                        if (used.has(j)) continue;
+                        const s = segs[j];
+                        if (s.ka === curKey) { next = s.b; nextKey = s.kb; used.add(j); found = true; break; }
+                        if (s.kb === curKey) { next = s.a; nextKey = s.ka; used.add(j); found = true; break; }
+                    }
+                    if (!found) break;
+                    polyline.push([next[0], next[1]]);
+                    cur = next; curKey = nextKey;
+                }
+                polylineData.push(polyline);
+                const d = 'M ' + polyline.map(([px, py]) => `${dataToSvgX(px)} ${dataToSvgY(py)}`).join(' L ');
+                paths.push(d);
+            }
+            contourPolylines = polylineData;
+            paths.forEach(pathD => {
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', pathD);
+                path.setAttribute('fill', 'none');
+                path.setAttribute('stroke', POINT_COLORS[selectedPointIndex % POINT_COLORS.length]);
+                path.setAttribute('stroke-opacity', '0.9');
+                path.setAttribute('stroke-width', '2');
+                path.setAttribute('stroke-dasharray', '6,4');
+                g.appendChild(path);
+            });
+        }
+        
+        function closestPointOnContour(svgX, svgY) {
+            if (contourPolylines.length === 0 || selectedPointIndex == null) return null;
+            const dataX = svgToDataX(svgX), dataY = svgToDataY(svgY);
+            let best = null, bestDist2 = Infinity;
+            for (const poly of contourPolylines) {
+                for (let k = 0; k < poly.length - 1; k++) {
+                    const a = poly[k], b = poly[k + 1];
+                    const ax = a[0], ay = a[1], bx = b[0], by = b[1];
+                    const dx = bx - ax, dy = by - ay;
+                    const len2 = dx * dx + dy * dy;
+                    const t = len2 <= 1e-20 ? 0 : Math.max(0, Math.min(1, ((dataX - ax) * dx + (dataY - ay) * dy) / len2));
+                    const px = ax + t * dx, py = ay + t * dy;
+                    const d2 = (dataX - px) ** 2 + (dataY - py) ** 2;
+                    if (d2 < bestDist2) { bestDist2 = d2; best = [px, py]; }
+                }
+            }
+            if (best == null) return null;
+            return refinePointOnContour(best[0], best[1]);
+        }
+        
+        function refinePointOnContour(x0, y0) {
+            const idx = selectedPointIndex;
+            const target = contourRTarget;
+            let x = x0, y = y0;
+            const eps = 1e-6;
+            const maxIter = 25;
+            for (let iter = 0; iter < maxIter; iter++) {
+                const r = correlationWithPointAt(idx, x, y);
+                const err = r - target;
+                if (Math.abs(err) < 1e-8) return [x, y];
+                const h = 1e-6 * (1 + Math.max(Math.abs(x), Math.abs(y)));
+                const rx = (correlationWithPointAt(idx, x + h, y) - r) / h;
+                const ry = (correlationWithPointAt(idx, x, y + h) - r) / h;
+                const g2 = rx * rx + ry * ry;
+                if (g2 < 1e-20) return [x, y];
+                const step = -err / g2;
+                const dx = step * rx, dy = step * ry;
+                let t = 1;
+                for (let b = 0; b < 12; b++) {
+                    const xn = x + t * dx, yn = y + t * dy;
+                    const rn = correlationWithPointAt(idx, xn, yn);
+                    if (Math.abs(rn - target) <= Math.abs(err)) { x = xn; y = yn; break; }
+                    t *= 0.5;
+                }
+            }
+            return [x, y];
+        }
+        
+        function buildPointsInSVG() {
+            const group = document.getElementById('pointsGroup');
+            group.innerHTML = '';
+            points.forEach((point, index) => {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('class', 'draggable-point');
+                circle.setAttribute('r', '6');
+                circle.setAttribute('fill', POINT_COLORS[index % POINT_COLORS.length]);
+                circle.setAttribute('stroke', '#fff');
+                circle.setAttribute('stroke-width', '2');
+                circle.setAttribute('data-index', index);
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('text-anchor', 'middle');
+                label.setAttribute('font-size', '12');
+                label.setAttribute('fill', '#2c3e50');
+                label.setAttribute('font-weight', 'bold');
+                label.textContent = 'P' + (index + 1);
+                point.element = circle;
+                point.labelEl = label;
+                group.appendChild(circle);
+                group.appendChild(label);
+                updatePointPosition(index);
+                circle.addEventListener('mousedown', (e) => startDrag(e, index));
+                circle.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const rect = document.getElementById('plotSvg').getBoundingClientRect();
+                    startDrag({ clientX: touch.clientX, clientY: touch.clientY }, index,
+                        touch.clientX - rect.left, touch.clientY - rect.top);
+                });
+            });
+        }
+        
+        function applyNumPoints() {
+            const n = Math.max(2, Math.min(15, parseInt(document.getElementById('numPointsInput').value, 10) || 3));
+            document.getElementById('numPointsInput').value = n;
+            createPointsOnDiagonal(n);
+            buildPointsInSVG();
+            selectedPointIndex = null;
+            drawContourLines();
+            updateCorrelationDisplay();
+            updatePointDisplay();
         }
         
         function initInteractivePlot() {
-            const svg = document.getElementById('plotSvg');
-            
-            // Initialize point elements
-            points[0].element = document.getElementById('point0');
-            points[1].element = document.getElementById('point1');
-            points[2].element = document.getElementById('point2');
-            
-            // Set initial positions
-            points.forEach((point, index) => {
-                updatePointPosition(index);
-            });
-            
-            // Add event listeners for dragging
-            points.forEach((point, index) => {
-                point.element.addEventListener('mousedown', (e) => startDrag(e, index));
-            });
-            
+            drawAxesAndLattice();
+            const n = Math.max(2, Math.min(15, parseInt(document.getElementById('numPointsInput').value, 10) || 3));
+            createPointsOnDiagonal(n);
+            buildPointsInSVG();
             document.addEventListener('mousemove', handleDrag);
             document.addEventListener('mouseup', endDrag);
-            
-            // Touch events for mobile
-            points.forEach((point, index) => {
-                point.element.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    const touch = e.touches[0];
-                    const rect = svg.getBoundingClientRect();
-                    const svgX = touch.clientX - rect.left;
-                    const svgY = touch.clientY - rect.top;
-                    startDrag({ clientX: touch.clientX, clientY: touch.clientY }, index, svgX, svgY);
-                });
-            });
-            
-            document.addEventListener('touchmove', (e) => {
-                e.preventDefault();
-                handleDrag(e.touches[0]);
-            });
-            
+            document.addEventListener('touchmove', (e) => { e.preventDefault(); handleDrag(e.touches[0]); });
             document.addEventListener('touchend', endDrag);
-            
             updateCorrelationDisplay();
             updatePointDisplay();
         }
         
         function startDrag(e, index, svgX = null, svgY = null) {
             draggingPoint = index;
+            selectedPointIndex = index;
+            drawContourLines();
             const svg = document.getElementById('plotSvg');
             const rect = svg.getBoundingClientRect();
-            
             if (svgX === null || svgY === null) {
                 svgX = e.clientX - rect.left;
                 svgY = e.clientY - rect.top;
             }
-            
             const point = points[index];
-            const currentSvgX = dataToSvgX(point.x);
-            const currentSvgY = dataToSvgY(point.y);
-            
-            dragOffset.x = svgX - currentSvgX;
-            dragOffset.y = svgY - currentSvgY;
+            dragOffset.x = svgX - dataToSvgX(point.x);
+            dragOffset.y = svgY - dataToSvgY(point.y);
         }
         
         function handleDrag(e) {
             if (draggingPoint === null) return;
-            
             const svg = document.getElementById('plotSvg');
             const rect = svg.getBoundingClientRect();
             const svgX = (e.clientX || e.touches?.[0]?.clientX || 0) - rect.left;
             const svgY = (e.clientY || e.touches?.[0]?.clientY || 0) - rect.top;
-            
-            const adjustedX = svgX - dragOffset.x;
-            const adjustedY = svgY - dragOffset.y;
-            
-            // Convert to data coordinates
-            let newX = svgToDataX(adjustedX);
-            let newY = svgToDataY(adjustedY);
-            
-            // Round to 0.01 increments
-            newX = roundToStep(newX, 0.01);
-            newY = roundToStep(newY, 0.01);
-            
-            // Clamp to valid range
-            newX = Math.max(DATA_MIN, Math.min(DATA_MAX, newX));
-            newY = Math.max(DATA_MIN, Math.min(DATA_MAX, newY));
-            
-            // Update point
-            const point = points[draggingPoint];
-            point.x = newX;
-            point.y = newY;
-            
+            let newX, newY;
+            const lockToContour = document.getElementById('lockToContourCheckbox').checked;
+            if (lockToContour && draggingPoint === selectedPointIndex && contourPolylines.length > 0) {
+                const onContour = closestPointOnContour(svgX, svgY);
+                if (onContour) {
+                    newX = roundToStep(onContour[0], 0.01);
+                    newY = roundToStep(onContour[1], 0.01);
+                } else {
+                    newX = svgToDataX(svgX - dragOffset.x);
+                    newY = svgToDataY(svgY - dragOffset.y);
+                    newX = roundToStep(newX, 0.01);
+                    newY = roundToStep(newY, 0.01);
+                    newX = Math.max(DATA_MIN, Math.min(DATA_MAX, newX));
+                    newY = Math.max(DATA_MIN, Math.min(DATA_MAX, newY));
+                }
+            } else {
+                newX = svgToDataX(svgX - dragOffset.x);
+                newY = svgToDataY(svgY - dragOffset.y);
+                newX = roundToStep(newX, 0.01);
+                newY = roundToStep(newY, 0.01);
+                newX = Math.max(DATA_MIN, Math.min(DATA_MAX, newX));
+                newY = Math.max(DATA_MIN, Math.min(DATA_MAX, newY));
+            }
+            points[draggingPoint].x = newX;
+            points[draggingPoint].y = newY;
             updatePointPosition(draggingPoint);
             updateCorrelationDisplay();
             updatePointDisplay();
+            if (!lockToContour) drawContourLines();
         }
         
         function endDrag() {
@@ -791,9 +1003,7 @@
         }
         
         function snapToDiagonal() {
-            // Snap each point to y=x line
             points.forEach((point, index) => {
-                // Calculate average of x and y, then set both to that value
                 const avg = (point.x + point.y) / 2;
                 const snapped = roundToStep(avg, 0.01);
                 point.x = snapped;
@@ -802,18 +1012,22 @@
             });
             updateCorrelationDisplay();
             updatePointDisplay();
+            drawContourLines();
         }
         
         function resetPoints() {
-            points[0] = { x: 0, y: 0, element: points[0].element };
-            points[1] = { x: 1, y: 1, element: points[1].element };
-            points[2] = { x: 2, y: 2, element: points[2].element };
-            
-            points.forEach((point, index) => {
-                updatePointPosition(index);
+            const n = points.length;
+            const span = POINT_MAX - POINT_MIN;
+            points.forEach((p, i) => {
+                const t = n === 1 ? 0 : POINT_MIN + (span * i) / (n - 1);
+                p.x = t;
+                p.y = t;
+                updatePointPosition(i);
             });
+            selectedPointIndex = null;
             updateCorrelationDisplay();
             updatePointDisplay();
+            drawContourLines();
         }
         
         function generateLinearData(correlation, n = 100) {
